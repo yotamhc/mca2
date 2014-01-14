@@ -34,6 +34,9 @@ TableStateMachine *createTableStateMachine(unsigned int numStates, int num_commo
 	STATE_PTR_TYPE_WIDE *table;
 	unsigned char *matches;
 	char **patterns;
+	PatternSetMap *sourcePatternSets;
+	PatternSetMap *matchPatternSets;
+	STATE_PTR_TYPE_WIDE *failures;
 #ifdef DEPTHMAP
 	int *depthMap;
 #endif
@@ -42,6 +45,9 @@ TableStateMachine *createTableStateMachine(unsigned int numStates, int num_commo
 	table = (STATE_PTR_TYPE_WIDE*)malloc(sizeof(STATE_PTR_TYPE_WIDE) * numStates * 256);
 	matches = (unsigned char*)malloc(sizeof(unsigned char) * (int)(ceil(numStates / 8.0)));
 	patterns = (char**)malloc(sizeof(char*) * numStates);
+	sourcePatternSets = (PatternSetMap*)malloc(sizeof(PatternSetMap) * numStates);
+	matchPatternSets = (PatternSetMap*)malloc(sizeof(PatternSetMap) * numStates);
+	failures = (STATE_PTR_TYPE_WIDE*)malloc(sizeof(STATE_PTR_TYPE_WIDE) * numStates);
 #ifdef DEPTHMAP
 	depthMap = (int*)malloc(sizeof(int) * numStates);
 #endif
@@ -58,11 +64,17 @@ TableStateMachine *createTableStateMachine(unsigned int numStates, int num_commo
 	memset(table, 0, sizeof(STATE_PTR_TYPE_WIDE) * numStates * 256);
 	memset(matches, 0, sizeof(unsigned char) * (int)(ceil(numStates / 8.0)));
 	memset(patterns, 0, sizeof(char*) * numStates);
+	memset(sourcePatternSets, 0, sizeof(PatternSetMap) * numStates);
+	memset(matchPatternSets, 0, sizeof(PatternSetMap) * numStates);
+	memset(failures, 0, sizeof(STATE_PTR_TYPE_WIDE) * numStates);
 
 	machine->table = table;
 	machine->numStates = numStates;
 	machine->matches = matches;
 	machine->patterns = patterns;
+	machine->sourcePatternSets = sourcePatternSets;
+	machine->matchPatternSets = matchPatternSets;
+	machine->failures = failures;
 #ifdef DEPTHMAP
 	machine->depthMap = depthMap;
 #endif
@@ -79,6 +91,9 @@ void destroyTableStateMachine(TableStateMachine *machine) {
 		}
 	}
 	free(machine->patterns);
+	free(machine->sourcePatternSets);
+	free(machine->matchPatternSets);
+	free(machine->failures);
 	free(machine->matches);
 	free(machine->table);
 //#ifdef HEAVY_PACKET_RECOGNITION
@@ -118,7 +133,7 @@ char *createPattern_TM(char *pattern, int len) {
 	return res;
 }
 
-void setMatch(TableStateMachine *machine, STATE_PTR_TYPE_WIDE state, char *pattern, int length) {
+void setMatch(TableStateMachine *machine, STATE_PTR_TYPE_WIDE state, char *pattern, int length, PatternSetMap matchPatternSets) {
 	char *cpy;
 	SET_1BIT_ELEMENT(machine->matches, state, 1);
 	cpy = createPattern_TM(pattern, length);
@@ -128,6 +143,16 @@ void setMatch(TableStateMachine *machine, STATE_PTR_TYPE_WIDE state, char *patte
 	cpy[length] = '\0';
 	*/
 	machine->patterns[state] = cpy;
+	machine->matchPatternSets[state] = matchPatternSets;
+}
+
+void printMatchPatternsSets(PatternSetMap matchPatternSets) {
+	int i;
+	for (i = 0; i < 8 * sizeof(PatternSetMap); i++) {
+		if (GET_1BIT_ELEMENT((unsigned char*)(&matchPatternSets), i)) {
+			printf("%d ", i);
+		}
+	}
 }
 
 STATE_PTR_TYPE_WIDE getNextStateFromTable(TableStateMachine *machine, STATE_PTR_TYPE_WIDE currentState, char c) {
@@ -140,7 +165,8 @@ static long _idx = 0;
 
 int matchTableMachine(TableStateMachine *machine, MulticoreManager *manager, int transfer_heavy, char *input, int length, int verbose,
 		long *numAccesses, long *accessesByDepth, long *accessesByState, int *visits,
-		int *is_heavy, int *last_idx_in_root, double *uncommonRate) {
+		int *is_heavy, int *last_idx_in_root, double *uncommonRate,
+		PatternSetMap activeSets) {
 //	int matchTableMachine(TableStateMachine *machine, char *input, int length, int verbose) {
 	STATE_PTR_TYPE_WIDE current, next;
 	STATE_PTR_TYPE_WIDE *table;
@@ -232,6 +258,20 @@ int matchTableMachine(TableStateMachine *machine, MulticoreManager *manager, int
 
 		next = GET_NEXT_STATE(table, current, input[idx]);
 
+		// Multi pattern sets:
+		if ((machine->sourcePatternSets[next] & activeSets) == 0) {
+			do {
+				// Next state source sets do not intersect with active sets
+				// -> fail from *current* state (ignore forward transition)
+				next = machine->failures[current];
+			} while (next != 0 && (machine->sourcePatternSets[next] & activeSets) == 0);
+
+			// Avoid skipping current char in the input
+			if (current != 0 || next != 0) {
+				idx--;
+			}
+		}
+
 #ifdef TRACE_STATE_MACHINE
 		printf("Current state: %d, next char: ", current);
 		val = (int)((input[idx]) & 0x0FF);
@@ -252,7 +292,9 @@ int matchTableMachine(TableStateMachine *machine, MulticoreManager *manager, int
 
 #ifdef PRINT_MATCHES
 			if (verbose) {
-				printf("%s\n", patterns[next]);
+				printf("Match! Sets: {");
+				printMatchPatternsSets(machine->matchPatternSets[next]);
+				printf("} %s\n", patterns[next]);
 #ifdef TRACE_STATE_MACHINE
 				getc(stdin);
 #endif
@@ -308,7 +350,9 @@ int matchTableMachine_no_trasfer(TableStateMachine *machine, MulticoreManager *m
 			res = 1;
 #ifdef PRINT_MATCHES
 			if (verbose) {
-				printf("%s\n", patterns[next]);
+				printf("Match! Sets: {");
+				printMatchPatternsSets(machine->matchPatternSets[next]);
+				printf("} %s\n", patterns[next]);
 			}
 #endif
 		}

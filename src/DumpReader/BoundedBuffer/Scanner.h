@@ -14,6 +14,7 @@
 #include "../../StateMachine/TableStateMachine.h"
 #endif
 #include "../../Common/Timer.h"
+#include "../../AhoCorasick/ACTypes.h"
 
 struct multicore_manager;
 
@@ -39,6 +40,7 @@ typedef struct scanner_data {
 	int alert_mode_active;
 	int finishing_alert_mode;
 	int drop;
+	PatternSetMap activeSets;
 } ScannerData;
 
 enum MACHINE_TYPE {
@@ -59,6 +61,8 @@ int scanner_start_with_affinity(ScannerData *scanner, int cpuid);
 void scanner_join(ScannerData *scanner);
 
 void scanner_set_machine_type(ScannerData *scanner, enum MACHINE_TYPE type);
+
+void scanner_set_active_sets(ScannerData *scanner, PatternSetMap activeSets);
 
 void scanner_set_alert_mode(ScannerData *scanner, int alert_mode_active);
 

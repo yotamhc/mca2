@@ -50,8 +50,10 @@ void putStates(TableStateMachine *machine, ACTree *tree, int verbose) {
 		memset(row, 0, sizeof(STATE_PTR_TYPE_WIDE) * 256);
 		memset(hasValue, 0, sizeof(int) * 256);
 
+		machine->sourcePatternSets[node->id] = node->sourcePatternSets;
+
 		if (node->match) {
-			setMatch(machine, node->id, node->message, node->messageLength);
+			setMatch(machine, node->id, node->message, node->messageLength, node->matchPatternSets);
 		}
 
 		if (node->numGotos > 0) {
@@ -70,6 +72,7 @@ void putStates(TableStateMachine *machine, ACTree *tree, int verbose) {
 
 		done = 0;
 		fail = node->failure;
+		machine->failures[node->id] = node->failure->id;
 		do {
 			if (fail == NULL)
 				fail = tree->root;
@@ -222,7 +225,7 @@ int markCommonStates(TableStateMachine *machine, const char *common_marks_path) 
 #define MC2_PATH_FILE "/tmp/mc2_bad_path.bin"
 #endif
 
-TableStateMachine *generateTableStateMachine(const char *path, int num_commons, double uncommon_rate_limit, const char *common_marks_path, const char *common_reorder_map_path, int verbose) {
+TableStateMachine *generateTableStateMachine(const char **paths, int setCount, int num_commons, double uncommon_rate_limit, const char *common_marks_path, const char *common_reorder_map_path, int verbose) {
 	ACTree tree;
 	TableStateMachine *machine;
 #ifdef FIND_MC2_BAD_PATH
@@ -233,7 +236,7 @@ TableStateMachine *generateTableStateMachine(const char *path, int num_commons, 
 	FILE *file;
 #endif
 
-	acBuildTree(&tree, path, 0, 1);
+	acBuildTreeMultiPatternSets(&tree, setCount, paths, 0, 1);
 
 #ifdef HEAVY_PACKET_RECOGNITION
 #ifndef PRINT_STATE_VISIT_HIST

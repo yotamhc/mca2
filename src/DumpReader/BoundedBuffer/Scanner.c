@@ -350,7 +350,7 @@ void *start_scanner_thread(void *param) {
 #endif
 			num_total++;
 
-			if (scanner->verbose) {
+			if (0 && scanner->verbose) {
 				printf("Scanning packet (size=%u) from ", packet->size);
 				printIP(packet->source);
 				printf(" to ");
@@ -359,6 +359,9 @@ void *start_scanner_thread(void *param) {
 				printf("------------------------------------\n");
 			}
 			if (scanner->finishing_alert_mode || !(scanner->isTableMachine)  || scanner->manager->num_of_regular_threads == 0) {
+#ifndef HYBRID_SCANNER
+				retval = match(scanner->machine, packet->data, packet->size, scanner->verbose, &(scanner->stats), last_idx_in_root, scanner->drop);
+#else
 				if (scanner->manager->dedicated_use_compressed) {
 					retval = match(scanner->machine, packet->data, packet->size, scanner->verbose, &(scanner->stats), last_idx_in_root, scanner->drop);
 				} else {
@@ -376,7 +379,8 @@ void *start_scanner_thread(void *param) {
 							packet->data,
 							packet->size,
 							scanner->verbose,
-							NULL, NULL, NULL, NULL, &is_heavy, NULL, &uncommonRate);
+							NULL, NULL, NULL, NULL, &is_heavy, NULL, &uncommonRate,
+							scanner->activeSets /* active pattern sets */);
 
 					if (is_heavy) {
 						num_heavy_since_alert++;
@@ -388,6 +392,7 @@ void *start_scanner_thread(void *param) {
 					//}
 #endif
 				}
+#endif
 #ifdef DROP_STATISTICS
 				if (retval == -1) {
 					// Packet was dropped
@@ -407,7 +412,8 @@ void *start_scanner_thread(void *param) {
 						packet->data,
 						packet->size,
 						scanner->verbose,
-						&numAccesses, accessesByDepth, accessesByState, NULL, &is_heavy, &last_idx_in_root, &uncommonRate);
+						&numAccesses, accessesByDepth, accessesByState, NULL, &is_heavy, &last_idx_in_root, &uncommonRate,
+						scanner->activeSets /* active pattern sets */);
 #else
 #ifdef PRINT_STATE_VISIT_HIST
 #ifndef HYBRID_SCANNER
@@ -418,7 +424,8 @@ void *start_scanner_thread(void *param) {
 						packet->data,
 						packet->size,
 						scanner->verbose,
-						NULL, NULL, NULL, visits, &is_heavy, &last_idx_in_root, &uncommonRate);
+						NULL, NULL, NULL, visits, &is_heavy, &last_idx_in_root, &uncommonRate,
+						scanner->activeSets /* active pattern sets */);
 #else
 #ifndef HYBRID_SCANNER
 						(TableStateMachine*)(scanner->machine), NULL, FALSE,
@@ -433,7 +440,8 @@ void *start_scanner_thread(void *param) {
 						packet->data,
 						packet->size,
 						scanner->verbose,
-						NULL, NULL, NULL, NULL, &is_heavy, &last_idx_in_root, &uncommonRate);
+						NULL, NULL, NULL, NULL, &is_heavy, &last_idx_in_root, &uncommonRate,
+						scanner->activeSets /* active pattern sets */);
 #endif // PRINT_STATE_VISIT_HIST
 #endif // COUNT_BY_DEPTH
 #ifdef DONT_TRANSFER_STOLEN
@@ -683,6 +691,7 @@ void scanner_init(ScannerData *scanner, int id, MulticoreManager *manager, State
 #ifdef HYBRID_SCANNER
 	scanner->tableMachine = tableMachine;
 	//printf("Table machine address upon scanner init: %p\n", tableMachine);
+	scanner->drop = drop;
 #endif
 	scanner->isTableMachine = isTableMachine;
 	scanner->packet_queue = packet_queue;
@@ -693,7 +702,11 @@ void scanner_init(ScannerData *scanner, int id, MulticoreManager *manager, State
 	scanner->manager = manager;
 	scanner->alert_mode_active = 0;
 	scanner->finishing_alert_mode = 0;
-	scanner->drop = drop;
+	scanner->activeSets = 0;
+}
+
+void scanner_set_active_sets(ScannerData *scanner, PatternSetMap activeSets) {
+	scanner->activeSets = activeSets;
 }
 
 int scanner_start(ScannerData *scanner) {

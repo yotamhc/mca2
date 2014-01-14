@@ -9,6 +9,7 @@
 #define TABLESTATEMACHINE_H_
 #include "../Common/Types.h"
 #include "../Common/BitArray/BitArray.h"
+#include "../AhoCorasick/ACTypes.h"
 //#include "../Multicore/MulticoreManager.h"
 
 //typedef unsigned int STATE_PTR_TYPE_WIDE;
@@ -26,6 +27,9 @@ typedef struct {
 	unsigned char *matches;
 	char **patterns;
 	unsigned int numStates;
+	PatternSetMap *sourcePatternSets;
+	PatternSetMap *matchPatternSets;
+	STATE_PTR_TYPE_WIDE *failures;
 #ifdef DEPTHMAP
 	int *depthMap;
 #endif
@@ -41,11 +45,12 @@ TableStateMachine *createTableStateMachine(unsigned int numStates, int num_commo
 void destroyTableStateMachine(TableStateMachine *machine);
 
 void setGoto(TableStateMachine *machine, STATE_PTR_TYPE_WIDE currentState, char c, STATE_PTR_TYPE_WIDE nextState);
-void setMatch(TableStateMachine *machine, STATE_PTR_TYPE_WIDE state, char *pattern, int length);
+void setMatch(TableStateMachine *machine, STATE_PTR_TYPE_WIDE state, char *pattern, int length, PatternSetMap matchPatternSets);
 
 //int matchTableMachine(TableStateMachine *tableMachine, char *input, int length, int verbose);
 int matchTableMachine(TableStateMachine *machine, struct multicore_manager *manager, int transfer_heavy, char *input, int length, int verbose,
-		long *numAccesses, long *accessesByDepth, long *accessesByState, int *visits, int *is_heavy, int *last_idx_in_root, double *uncommonRate);
+		long *numAccesses, long *accessesByDepth, long *accessesByState, int *visits, int *is_heavy, int *last_idx_in_root, double *uncommonRate,
+		PatternSetMap activeSets);
 
 int matchTableMachine_no_trasfer(TableStateMachine *machine, struct multicore_manager *manager, char *input, int length, int verbose, int drop);
 

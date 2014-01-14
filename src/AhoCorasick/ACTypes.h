@@ -8,7 +8,10 @@
 #ifndef ACTYPES_H_
 #define ACTYPES_H_
 
+#include "../Common/Flags.h"
 #include "../Common/HashMap/HashMap.h"
+
+typedef unsigned int PatternSetMap;
 
 struct st_node;
 
@@ -30,7 +33,9 @@ typedef struct st_node {
 	char c1, c2;
 	int isFirstLevelNode;
 	int isSecondLevelNode;
-	int marked;
+	int marked; // for debug purposes
+	PatternSetMap sourcePatternSets; // bitmap
+	PatternSetMap matchPatternSets; // bitmap
 } Node;
 
 #ifdef PCRE

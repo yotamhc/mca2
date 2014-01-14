@@ -11,6 +11,7 @@
 #include "../Common/Flags.h"
 #include "ACBuilder.h"
 #include "NodeQueue.h"
+#include "../Common/BitArray/BitArray.h"
 
 #define READ_BUFFER_SIZE 1024
 #define MAX_STATES 65536
@@ -66,6 +67,8 @@ Node *createNewNode(ACTree *tree, Node *parent) {
 	node->c1 = 0;
 	node->c2 = 0;
 	node->marked = 0;
+	node->sourcePatternSets = 0;
+	node->matchPatternSets = 0;
 	return node;
 }
 
@@ -84,12 +87,13 @@ Node *acGetNextNode(Node *node, char c) {
 	return pair->ptr;
 }
 
-void enter(ACTree *tree, char *pattern, int len) {
+void enter(ACTree *tree, char *pattern, int len, int patternSetID) {
 	Node *state = tree->root;
 	int j = 0, p;
 	Node *next, *newState;
 
 	while ((next = acGetNextNode(state, pattern[j])) != NULL && j < len) {
+		SET_1BIT_ELEMENT((unsigned char *)(&(state->sourcePatternSets)), patternSetID, 1);
 		state = next;
 		j++;
 	}
@@ -99,6 +103,7 @@ void enter(ACTree *tree, char *pattern, int len) {
 		Pair *pair = createNewPair(pattern[p], newState);
 		hashmap_put(state->gotos, pattern[p], pair);
 		state->numGotos++;
+		SET_1BIT_ELEMENT((unsigned char *)(&(state->sourcePatternSets)), patternSetID, 1);
 		state = newState;
 	}
 
@@ -108,6 +113,8 @@ void enter(ACTree *tree, char *pattern, int len) {
 	strncpy(state->message, pattern, len);
 	state->message[len] = '\0';
 	state->messageLength = len;
+	SET_1BIT_ELEMENT((unsigned char *)(&(state->sourcePatternSets)), patternSetID, 1);
+	SET_1BIT_ELEMENT((unsigned char *)(&(state->matchPatternSets)), patternSetID, 1);
 }
 
 void constructFailures(ACTree *tree) {
@@ -300,11 +307,23 @@ void printPair(void *data) {
 	}
 }
 
+void printPatternsSetsBitmap(PatternSetMap patternSets) {
+	int i;
+	for (i = 0; i < 8 * sizeof(PatternSetMap); i++) {
+		if (GET_1BIT_ELEMENT((unsigned char*)(&patternSets), i)) {
+			printf("%d ", i);
+		}
+	}
+}
+
 void printNode(Node *node) {
 	int i, val;
 	printf("Node ID: %d, Depth: %d, Gotos: ", node->id, node->depth);
 	hashmap_print(node->gotos, &printPair);
-	printf(", Failure: %d, Match: %d", node->failure->id, node->match);
+	printf(", Failure: %d", node->failure->id);
+	printf(", Sources: {");
+	printPatternsSetsBitmap(node->sourcePatternSets);
+	printf("}, Match: %d", node->match);
 	if (node->match) {
 		printf(" (message: ");//, node->message);
 		for (i = 0; i < node->messageLength; i++) {
@@ -319,7 +338,9 @@ void printNode(Node *node) {
 				printf("%X|", val);
 			}
 		}
-		printf(" [length: %d])", node->messageLength);
+		printf(" [length: %d], sources: {", node->messageLength);
+		printPatternsSetsBitmap(node->matchPatternSets);
+		printf("})");
 	}
 	if (node->hasFailInto) {
 		printf(" *Has %d fail(s) into it*", node->hasFailInto);
@@ -502,7 +523,7 @@ void printFailPathLengthHistogram(ACTree *tree) {
 
 #endif
 
-#define MAX_PATTERNS 16512
+#define MAX_PATTERNS -1
 
 void acBuildTree(ACTree *tree, const char *path, int avoidFailToLeaves, int mixID) {
 	FILE *f;
@@ -550,7 +571,7 @@ void acBuildTree(ACTree *tree, const char *path, int avoidFailToLeaves, int mixI
 			exit(1);
 		}
 		//if (tree->size + length <= MAX_STATES) {
-		enter(tree, buff, length);
+		enter(tree, buff, length, 0);
 		//}
 		count++;
 #ifdef PRINT_CHAR_COUNT
@@ -601,6 +622,79 @@ void acBuildTree(ACTree *tree, const char *path, int avoidFailToLeaves, int mixI
 		mixIDs(tree->root, tree->size);
 	}
 #endif
+
+#ifdef PRINT_AHO_CORASICK
+	acPrintTree(tree);
+#endif
+}
+
+void acBuildTreeMultiPatternSets(ACTree *tree, int setCount, const char **paths, int avoidFailToLeaves, int mixID) {
+	FILE *f;
+	char *path;
+	char buff[READ_BUFFER_SIZE];
+	unsigned char size[2];
+	int len, length, count, set;
+#ifdef PRINT_CHAR_COUNT
+	long charcount;
+#endif
+
+	tree->size = 0;
+	count = 0;
+#ifdef PRINT_CHAR_COUNT
+	charcount = 0;
+#endif
+	tree->root = createNewNode(tree, NULL);
+
+	for (set = 0; set < setCount; set++) {
+		path = (char*)paths[set];
+		f = fopen(path, "rb");
+		if (!f) {
+			fprintf(stderr, "Cannot read file %s\n", path);
+			exit(1);
+		}
+
+		while (!feof(f) && (MAX_PATTERNS <= 0 || count < MAX_PATTERNS)) {
+			len = fread(size, sizeof(unsigned char), 2, f);
+			if (len == 0)
+				break;
+
+			if (len != 2) {
+				fprintf(stderr, "Cannot read size of pattern from file %s\n", path);
+				exit(1);
+			}
+			length = (size[0] << 8) | size[1];
+
+			len = fread(buff, sizeof(char), length, f);
+			if (len != length) {
+				fprintf(stderr, "Cannot read pattern from file %s\n", path);
+				exit(1);
+			}
+
+			buff[length] = '\0';
+
+			if (length == 0) {
+				fprintf(stderr, "Found zero length pattern in file %s\n", path);
+				exit(1);
+			}
+			enter(tree, buff, length, set);
+			count++;
+#ifdef PRINT_CHAR_COUNT
+			charcount += length;
+#endif
+		}
+		fclose(f);
+	}
+#ifdef PRINT_CHAR_COUNT
+	printf("Total chars: %ld\n", charcount);
+#endif
+
+	constructFailures(tree);
+
+	getL2nums(tree);
+
+	if (avoidFailToLeaves) {
+		avoidFailToAcceptingStates(tree);
+	}
 
 #ifdef PRINT_AHO_CORASICK
 	acPrintTree(tree);

@@ -57,6 +57,7 @@
 #define OPTION_FULLTBL		'a'
 #define OPTION_COMMON		'f'
 #define OPTION_THRESHOLDS 	'A'
+#define OPTION_ACTIVE_SETS	'S'
 
 // Numeric options
 #define OPTION_MAXLE		'l'
@@ -84,22 +85,23 @@
 #define IDX_FULLTBL		4
 #define IDX_COMMON		5
 #define IDX_THRESHOLDS	6
-#define IDX_MAXLE		7
-#define IDX_MAXBM		8
-#define IDX_THREADS		9
-#define IDX_STEAL		10
-#define IDX_REPEAT		11
-#define IDX_WG_SIZE		12
-#define IDX_MAX_WGS		13
-#define IDX_COMMON_NUM	14
-#define IDX_UNCOMMON_LIM 15
-#define IDX_DROP_LEN	16
-#define IDX_VERBOSE		17
-#define IDX_TIMING		18
-#define IDX_USE_COMP 	19
+#define IDX_ACTIVE_SETS 7
+#define IDX_MAXLE		8
+#define IDX_MAXBM		9
+#define IDX_THREADS		10
+#define IDX_STEAL		11
+#define IDX_REPEAT		12
+#define IDX_WG_SIZE		13
+#define IDX_MAX_WGS		14
+#define IDX_COMMON_NUM	15
+#define IDX_UNCOMMON_LIM 16
+#define IDX_DROP_LEN	17
+#define IDX_VERBOSE		18
+#define IDX_TIMING		19
+#define IDX_USE_COMP 	20
 
-#define NUM_OF_OPTIONS 			20
-#define NUM_OF_STRING_OPTIONS	7
+#define NUM_OF_OPTIONS 			21
+#define NUM_OF_STRING_OPTIONS	8
 #define NUM_OF_NUMERIC_OPTIONS	10
 
 #define DEFAULT_MAX_GOTOS_LE 4
@@ -144,6 +146,8 @@ int checkOptionsValidity(int *options) {
 #endif
 	if (options[IDX_COMMON] && !options[IDX_FULLTBL])
 		return 0;
+	if (options[IDX_ACTIVE_SETS] && !options[IDX_FULLTBL])
+		return 0;
 	return 1;
 }
 
@@ -166,6 +170,53 @@ double *parseThresholds(const char *input, double *out) {
 	return out;
 }
 
+PatternSetMap parseActiveSets(const char *input) {
+	int i, last;
+	int value;
+	char buff[128];
+	PatternSetMap map;
+
+	last = 0;
+
+	strcpy(buff, input);
+	buff[strlen(input)] = ',';
+	buff[strlen(input)+1] = '\0';
+
+	for (i = 0; buff[i] != '\0'; i++) {
+		if (buff[i] == ',') {
+			buff[i] = '\0';
+			value = atoi(&(buff[last]));
+			if (value < 0 || value >= sizeof(PatternSetMap) * 8) {
+				fprintf(stderr, "Invalid active set value: %d\n", value);
+				exit(1);
+			}
+			SET_1BIT_ELEMENT((unsigned char *)(&map), value, 1);
+			last = i + 1;
+		}
+	}
+	return map;
+}
+
+int parsePatternSets(char *in, char **paths) {
+	int i, last;
+	int p;
+	p = 0;
+	last = 0;
+	i = 0;
+	while (1) {
+		if (in[i] == '\0' || in[i] == ',') {
+			paths[p] = &(in[last]);
+			p++;
+			last = i + 1;
+			if (in[i] == '\0')
+				break;
+			in[i] = '\0';
+		}
+		i++;
+	}
+	return p;
+}
+
 int main(int argc, const char *argv[]) {
 /*
 	main_findLongestPath();
@@ -175,12 +226,15 @@ int main(int argc, const char *argv[]) {
 	StateMachine *machine;
 #ifdef HYBRID_SCANNER
 	TableStateMachine *tableMachine;
+	double thresholds[128];
 #endif
 	int options[NUM_OF_OPTIONS]; // [ c, d, r, s, a, f, l, b, m, p, n, v, t, u ]
 	const char *paths[NUM_OF_STRING_OPTIONS];
 	int values[NUM_OF_OPTIONS];
 	int i, idx;
-	double thresholds[128];
+	char *patternPaths[128];
+	int numPatternSets;
+	PatternSetMap activeSets;
 
 	machine = NULL;
 
@@ -220,6 +274,9 @@ int main(int argc, const char *argv[]) {
 			break;
 		case OPTION_THRESHOLDS:
 			idx = IDX_THRESHOLDS;
+			break;
+		case OPTION_ACTIVE_SETS:
+			idx = IDX_ACTIVE_SETS;
 			break;
 		case OPTION_MAXLE:
 			idx = IDX_MAXLE;
@@ -328,6 +385,10 @@ int main(int argc, const char *argv[]) {
 	tableMachine = NULL;
 #endif
 
+	if (paths[IDX_FULLTBL]) {
+		numPatternSets = parsePatternSets((char*)(paths[IDX_FULLTBL]), patternPaths);
+	}
+
 	if (options[IDX_CREATE]) {
 		machine = createStateMachine(paths[IDX_CREATE], values[IDX_MAXLE], values[IDX_MAXBM], options[IDX_VERBOSE]);
 		//machine = createSimpleStateMachine(paths[0], values[0], values[1], options[8]);
@@ -335,7 +396,7 @@ int main(int argc, const char *argv[]) {
 	} else if (options[IDX_READ]) {
 		machine = createStateMachineFromDump(paths[IDX_READ]);
 	} else if (options[IDX_FULLTBL]) {
-		machine = (StateMachine*)generateTableStateMachine(paths[IDX_FULLTBL], values[IDX_COMMON_NUM], NULL, paths[IDX_COMMON], options[IDX_VERBOSE]);
+		machine = (StateMachine*)generateTableStateMachine((const char**)patternPaths, numPatternSets, values[IDX_COMMON_NUM], 0, NULL, paths[IDX_COMMON], options[IDX_VERBOSE]);
 	}
 #else
 	} else if (options[IDX_READ] && options[IDX_FULLTBL]) {
@@ -344,23 +405,31 @@ int main(int argc, const char *argv[]) {
 			values[IDX_COMMON_NUM] = __INT32_MAX__;
 		}
 		machine = createStateMachineFromDump(paths[IDX_READ]);
-		tableMachine = generateTableStateMachine(paths[IDX_FULLTBL], values[IDX_COMMON_NUM], ((double)values[IDX_UNCOMMON_LIM])/100.0, NULL, paths[IDX_COMMON], options[IDX_VERBOSE]);
+		tableMachine = generateTableStateMachine((const char**)patternPaths, numPatternSets, values[IDX_COMMON_NUM], ((double)values[IDX_UNCOMMON_LIM])/100.0, NULL, paths[IDX_COMMON], options[IDX_VERBOSE]);
 	}
 #endif
 
 	if (options[IDX_DUMP]) {
 		dumpStateMachine(machine, paths[IDX_DUMP]);
 	} else if (options[IDX_SCAN]) {
+		printf("Active pattern sets: ");
+		if (options[IDX_ACTIVE_SETS]) {
+			activeSets = parseActiveSets(paths[IDX_ACTIVE_SETS]);
+			printf("%s\n", paths[IDX_ACTIVE_SETS]);
+		} else {
+			activeSets = (PatternSetMap)(-1); // All sets
+			printf("All (not specified)\n");
+		}
 #ifdef HYBRID_SCANNER
 		if (tableMachine == NULL) {
 			fprintf(stderr, "ERROR: Must specify both -r and -a for hybrid scan mode\n");
 			return 1;
 		} else {
-			inspectDumpFile(paths[IDX_SCAN], values[IDX_REPEAT], machine, tableMachine, 1, options[IDX_VERBOSE], options[IDX_TIMING], values[IDX_THREADS],
+			inspectDumpFile(paths[IDX_SCAN], acactiveSets, values[IDX_REPEAT], machine, tableMachine, 1, options[IDX_VERBOSE], options[IDX_TIMING], values[IDX_THREADS],
 					values[IDX_STEAL], options[IDX_USE_COMP], values[IDX_WG_SIZE], values[IDX_MAX_WGS], parseThresholds(paths[IDX_THRESHOLDS], thresholds), values[IDX_DROP_LEN]);
 		}
 #else
-		inspectDumpFile(paths[IDX_SCAN], machine, options[IDX_FULLTBL], options[IDX_VERBOSE], options[IDX_TIMING], values[IDX_THREADS]);
+		inspectDumpFile(paths[IDX_SCAN], activeSets, values[IDX_REPEAT], machine, options[IDX_FULLTBL], options[IDX_VERBOSE], options[IDX_TIMING], values[IDX_THREADS]);
 #endif
 		//runTest(machine, options[4]);
 	}
