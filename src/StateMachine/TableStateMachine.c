@@ -255,22 +255,23 @@ int matchTableMachine(TableStateMachine *machine, MulticoreManager *manager, int
 		}
 
 #endif
-
 		next = GET_NEXT_STATE(table, current, input[idx]);
 
+#ifdef MULTI_PATTERN_SET_PARTIAL_DFA
 		// Multi pattern sets:
 		if ((machine->sourcePatternSets[next] & activeSets) == 0) {
 			do {
 				// Next state source sets do not intersect with active sets
 				// -> fail from *current* state (ignore forward transition)
 				next = machine->failures[current];
-			} while (next != 0 && (machine->sourcePatternSets[next] & activeSets) == 0);
+			} while ((machine->sourcePatternSets[next] & activeSets) == 0 && ((current = next) || 1));
 
 			// Avoid skipping current char in the input
 			if (current != 0 || next != 0) {
 				idx--;
 			}
 		}
+#endif // MULTI_PATTERN_SET_PARTIAL_DFA
 
 #ifdef TRACE_STATE_MACHINE
 		printf("Current state: %d, next char: ", current);

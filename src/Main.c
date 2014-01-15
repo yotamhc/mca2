@@ -385,7 +385,7 @@ int main(int argc, const char *argv[]) {
 	tableMachine = NULL;
 #endif
 
-	if (paths[IDX_FULLTBL]) {
+	if (options[IDX_FULLTBL]) {
 		numPatternSets = parsePatternSets((char*)(paths[IDX_FULLTBL]), patternPaths);
 	}
 

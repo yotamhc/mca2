@@ -60,4 +60,7 @@
 
 //#define PCRE
 
+//////// Multiple pattern sets ///////
+//#define MULTI_PATTERN_SET_PARTIAL_DFA
+
 #endif /* FLAGS_H_ */
