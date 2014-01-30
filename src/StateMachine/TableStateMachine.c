@@ -13,6 +13,7 @@
 #include "../Common/BitArray/BitArray.h"
 #include "TableStateMachine.h"
 #include "../Multicore/MulticoreManager.h"
+#include "../DumpReader/BoundedBuffer/MatchReport.h"
 
 #ifdef COUNT_BY_DEPTH
 #define DEPTHMAP
@@ -166,7 +167,7 @@ static long _idx = 0;
 int matchTableMachine(TableStateMachine *machine, MulticoreManager *manager, int transfer_heavy, char *input, int length, int verbose,
 		long *numAccesses, long *accessesByDepth, long *accessesByState, int *visits,
 		int *is_heavy, int *last_idx_in_root, double *uncommonRate,
-		PatternSetMap activeSets) {
+		ScannerData *scanner) {
 //	int matchTableMachine(TableStateMachine *machine, char *input, int length, int verbose) {
 	STATE_PTR_TYPE_WIDE current, next;
 	STATE_PTR_TYPE_WIDE *table;
@@ -290,6 +291,56 @@ int matchTableMachine(TableStateMachine *machine, MulticoreManager *manager, int
 			// PCRE: Invoke here
 			// Use a lookup table (or hash?) state->pcre
 			// Use libpcre for matching
+
+#ifdef MULTI_PATTERN_SET_REPORT_MATCHES
+			// Report the match
+#if MULTI_PATTERN_SET_MAX_SETS > 1
+			PatternSetMap reportees = (machine->matchPatternSets[next] & scanner->activeSets);
+#endif
+			/*
+			scanner->matchReports[0] += (reportees & 1);
+			scanner->matchReports[1] += (reportees & 2) >> 1;
+			scanner->matchReports[2] += (reportees & 4) >> 2;
+			scanner->matchReports[3] += (reportees & 8) >> 3;
+			scanner->matchReports[4] += (reportees & 16) >> 4;
+			scanner->matchReports[5] += (reportees & 32) >> 5;
+			scanner->matchReports[6] += (reportees & 64) >> 6;
+			scanner->matchReports[7] += (reportees & 128) >> 7;
+			*/
+#if MULTI_PATTERN_SET_MAX_SETS == 1
+			scanner->matchReports[0]++;
+#elif MULTI_PATTERN_SET_MAX_SETS >= 2
+			if (reportees & 1) //(1 << 0))
+				scanner->matchReports[0]++;
+			if (reportees & 2) //(1 << 1))
+				scanner->matchReports[1]++;
+#endif
+#if MULTI_PATTERN_SET_MAX_SETS >= 3
+			if (reportees & 4) //(1 << 2))
+				scanner->matchReports[2]++;
+#endif
+#if MULTI_PATTERN_SET_MAX_SETS >= 4
+			if (reportees & 8) //(1 << 3))
+				scanner->matchReports[3]++;
+#endif
+#if MULTI_PATTERN_SET_MAX_SETS >= 5
+			if (reportees & 16) //(1 << 4))
+				scanner->matchReports[4]++;
+#endif
+#if MULTI_PATTERN_SET_MAX_SETS >= 6
+			if (reportees & 32) //(1 << 5))
+				scanner->matchReports[5]++;
+#endif
+#if MULTI_PATTERN_SET_MAX_SETS >= 7
+			if (reportees & 64) //(1 << 6))
+				scanner->matchReports[6]++;
+#endif
+#if MULTI_PATTERN_SET_MAX_SETS >= 8
+			if (reportees & 128) //(1 << 7))
+				scanner->matchReports[7]++;
+#endif
+
+#endif
 
 #ifdef PRINT_MATCHES
 			if (verbose) {

@@ -15,6 +15,8 @@
 #endif
 #include "../../Common/Timer.h"
 #include "../../AhoCorasick/ACTypes.h"
+#include "../../Multicore/CyclicLockFreeQueue.h"
+#include "MatchReport.h"
 
 struct multicore_manager;
 
@@ -41,6 +43,9 @@ typedef struct scanner_data {
 	int finishing_alert_mode;
 	int drop;
 	PatternSetMap activeSets;
+#ifdef MULTI_PATTERN_SET_REPORT_MATCHES
+	int *matchReports;
+#endif
 } ScannerData;
 
 enum MACHINE_TYPE {
@@ -65,6 +70,10 @@ void scanner_set_machine_type(ScannerData *scanner, enum MACHINE_TYPE type);
 void scanner_set_active_sets(ScannerData *scanner, PatternSetMap activeSets);
 
 void scanner_set_alert_mode(ScannerData *scanner, int alert_mode_active);
+
+#ifdef MULTI_PATTERN_SET_REPORT_MATCHES
+void scanner_report_match(ScannerData *scanner, PatternSetMap reportees, STATE_PTR_TYPE_WIDE state, char *pattern, int idx);
+#endif
 
 #define GET_SCANNER_TRANSFER_RATE(scannerPtr) \
 	GET_TRANSFER_RATE((scannerPtr)->bytes_scanned, &((scannerPtr)->timer))

@@ -12,6 +12,9 @@
 #include "ACBuilder.h"
 #include "NodeQueue.h"
 #include "../Common/BitArray/BitArray.h"
+#ifdef AC_BUILDER_SKIP_PATTERNS
+#include <time.h>
+#endif
 
 #define READ_BUFFER_SIZE 1024
 #define MAX_STATES 65536
@@ -628,22 +631,32 @@ void acBuildTree(ACTree *tree, const char *path, int avoidFailToLeaves, int mixI
 #endif
 }
 
-void acBuildTreeMultiPatternSets(ACTree *tree, int setCount, const char **paths, int avoidFailToLeaves, int mixID) {
+void acBuildTreeMultiPatternSets(ACTree *tree, int setCount, const char **paths, int avoidFailToLeaves, int mixID, double skipProb) {
 	FILE *f;
 	char *path;
 	char buff[READ_BUFFER_SIZE];
 	unsigned char size[2];
 	int len, length, count, set;
+	int skip;
 #ifdef PRINT_CHAR_COUNT
 	long charcount;
+#endif
+#ifdef AC_BUILDER_SKIP_PATTERNS
+	int realCount;
 #endif
 
 	tree->size = 0;
 	count = 0;
+	skip = 0;
 #ifdef PRINT_CHAR_COUNT
 	charcount = 0;
 #endif
 	tree->root = createNewNode(tree, NULL);
+
+#ifdef AC_BUILDER_SKIP_PATTERNS
+	srand48(0);
+	realCount = 0;
+#endif
 
 	for (set = 0; set < setCount; set++) {
 		path = (char*)paths[set];
@@ -676,7 +689,21 @@ void acBuildTreeMultiPatternSets(ACTree *tree, int setCount, const char **paths,
 				fprintf(stderr, "Found zero length pattern in file %s\n", path);
 				exit(1);
 			}
-			enter(tree, buff, length, set);
+
+			if (length < AC_MIN_PATTERN_LENGTH) {
+				// Skip short patterns
+				continue;
+			}
+
+#ifdef AC_BUILDER_SKIP_PATTERNS
+			skip = !(drand48() < skipProb);
+#endif
+			if (!skip) {
+				enter(tree, buff, length, set);
+#ifdef AC_BUILDER_SKIP_PATTERNS
+				realCount++;
+#endif
+			}
 			count++;
 #ifdef PRINT_CHAR_COUNT
 			charcount += length;
@@ -686,6 +713,11 @@ void acBuildTreeMultiPatternSets(ACTree *tree, int setCount, const char **paths,
 	}
 #ifdef PRINT_CHAR_COUNT
 	printf("Total chars: %ld\n", charcount);
+	printf("Total states: %d\n", tree->size);
+	printf("Total patterns: %d\n", count);
+#ifdef AC_BUILDER_SKIP_PATTERNS
+	printf("\t(Real patterns count: %d)\n", realCount);
+#endif
 #endif
 
 	constructFailures(tree);

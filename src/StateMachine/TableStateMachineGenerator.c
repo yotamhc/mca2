@@ -225,7 +225,7 @@ int markCommonStates(TableStateMachine *machine, const char *common_marks_path) 
 #define MC2_PATH_FILE "/tmp/mc2_bad_path.bin"
 #endif
 
-TableStateMachine *generateTableStateMachine(const char **paths, int setCount, int num_commons, double uncommon_rate_limit, const char *common_marks_path, const char *common_reorder_map_path, int verbose) {
+TableStateMachine *generateTableStateMachine(const char **paths, int setCount, int num_commons, double uncommon_rate_limit, const char *common_marks_path, const char *common_reorder_map_path, int verbose, double skipProb) {
 	ACTree tree;
 	TableStateMachine *machine;
 #ifdef FIND_MC2_BAD_PATH
@@ -236,7 +236,7 @@ TableStateMachine *generateTableStateMachine(const char **paths, int setCount, i
 	FILE *file;
 #endif
 
-	acBuildTreeMultiPatternSets(&tree, setCount, paths, 0, 1);
+	acBuildTreeMultiPatternSets(&tree, setCount, paths, 0, 1, skipProb);
 
 #ifdef HEAVY_PACKET_RECOGNITION
 #ifndef PRINT_STATE_VISIT_HIST

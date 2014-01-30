@@ -132,6 +132,12 @@ void inspectDumpFile(const char *path, PatternSetMap activeSets, int repeat, Sta
 #endif
 	global_timer_start(&(manager.gtimer));
 #endif
+
+#ifdef INTERACTIVE_START
+	printf("Press Enter to start...\n");
+	getc(stdin);
+#endif
+
 	if (timing) {
 		startTiming(&t);
 	}

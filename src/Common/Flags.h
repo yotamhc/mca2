@@ -14,7 +14,7 @@
 #define PRINT_MATCHES
 //#define COUNT_FAIL_PERCENT
 //#define MIX_IDS
-//#define PRINT_CHAR_COUNT
+#define PRINT_CHAR_COUNT
 //#define PRINT_OUR_WC_PATTERNS
 //#define PRINT_LENGTH_HIST
 //#define SIMPLE_USE_TABLE
@@ -61,6 +61,11 @@
 //#define PCRE
 
 //////// Multiple pattern sets ///////
+//#define INTERACTIVE_START
 //#define MULTI_PATTERN_SET_PARTIAL_DFA
+#define MULTI_PATTERN_SET_REPORT_MATCHES
+#define MULTI_PATTERN_SET_MAX_SETS 1
+#define AC_BUILDER_SKIP_PATTERNS
+#define AC_MIN_PATTERN_LENGTH 3
 
 #endif /* FLAGS_H_ */

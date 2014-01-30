@@ -12,7 +12,7 @@
 #include "../Common/Flags.h"
 
 void acBuildTree(ACTree *tree, const char *path, int avoidFailToLeaves, int mixIDs);
-void acBuildTreeMultiPatternSets(ACTree *tree, int setCount, const char **paths, int avoidFailToLeaves, int mixID);
+void acBuildTreeMultiPatternSets(ACTree *tree, int setCount, const char **paths, int avoidFailToLeaves, int mixID, double skipProb);
 void acDestroyTreeNodes(ACTree *tree);
 Node *acGetNextNode(Node *node, char c);
 void acPrintTree(ACTree *tree);

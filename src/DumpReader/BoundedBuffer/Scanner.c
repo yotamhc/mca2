@@ -41,7 +41,9 @@ void *start_scanner_thread(void *param) {
 	int i;
 	int finish_round;
 	double uncommonRate;
+#ifdef HYBRID_SCANNER
 	int retval;
+#endif
 #ifdef DONT_TRANSFER_STOLEN
 	int dont_transfer_next;
 #endif
@@ -360,7 +362,7 @@ void *start_scanner_thread(void *param) {
 			}
 			if (scanner->finishing_alert_mode || !(scanner->isTableMachine)  || scanner->manager->num_of_regular_threads == 0) {
 #ifndef HYBRID_SCANNER
-				retval = match(scanner->machine, packet->data, packet->size, scanner->verbose, &(scanner->stats), last_idx_in_root, scanner->drop);
+				match(scanner->machine, packet->data, packet->size, scanner->verbose, &(scanner->stats), last_idx_in_root, scanner->drop);
 #else
 				if (scanner->manager->dedicated_use_compressed) {
 					retval = match(scanner->machine, packet->data, packet->size, scanner->verbose, &(scanner->stats), last_idx_in_root, scanner->drop);
@@ -380,7 +382,7 @@ void *start_scanner_thread(void *param) {
 							packet->size,
 							scanner->verbose,
 							NULL, NULL, NULL, NULL, &is_heavy, NULL, &uncommonRate,
-							scanner->activeSets /* active pattern sets */);
+							scanner);
 
 					if (is_heavy) {
 						num_heavy_since_alert++;
@@ -413,7 +415,7 @@ void *start_scanner_thread(void *param) {
 						packet->size,
 						scanner->verbose,
 						&numAccesses, accessesByDepth, accessesByState, NULL, &is_heavy, &last_idx_in_root, &uncommonRate,
-						scanner->activeSets /* active pattern sets */);
+						scanner);
 #else
 #ifdef PRINT_STATE_VISIT_HIST
 #ifndef HYBRID_SCANNER
@@ -425,7 +427,7 @@ void *start_scanner_thread(void *param) {
 						packet->size,
 						scanner->verbose,
 						NULL, NULL, NULL, visits, &is_heavy, &last_idx_in_root, &uncommonRate,
-						scanner->activeSets /* active pattern sets */);
+						scanner);
 #else
 #ifndef HYBRID_SCANNER
 						(TableStateMachine*)(scanner->machine), NULL, FALSE,
@@ -441,7 +443,7 @@ void *start_scanner_thread(void *param) {
 						packet->size,
 						scanner->verbose,
 						NULL, NULL, NULL, NULL, &is_heavy, &last_idx_in_root, &uncommonRate,
-						scanner->activeSets /* active pattern sets */);
+						scanner);
 #endif // PRINT_STATE_VISIT_HIST
 #endif // COUNT_BY_DEPTH
 #ifdef DONT_TRANSFER_STOLEN
@@ -614,6 +616,16 @@ void *start_scanner_thread(void *param) {
 
 	multicore_manager_scanner_done(scanner->manager);
 
+#ifdef MULTI_PATTERN_SET_REPORT_MATCHES
+	printf("Total matches per set: ");
+	for (i = 0; i < sizeof(PatternSetMap); i++) {
+		if (scanner->activeSets & (1 << i)) {
+			printf("Set %d: %d matches, ", i, scanner->matchReports[i]);
+		}
+	}
+	printf("\n");
+#endif
+
 #ifdef COUNT_BY_DEPTH
 
 #define DEPTH_THRESHOLD_FOR_DAVID_RATIO 1
@@ -703,10 +715,28 @@ void scanner_init(ScannerData *scanner, int id, MulticoreManager *manager, State
 	scanner->alert_mode_active = 0;
 	scanner->finishing_alert_mode = 0;
 	scanner->activeSets = 0;
+#ifdef MULTI_PATTERN_SET_REPORT_MATCHES
+	scanner->matchReports = NULL;
+#endif
 }
 
 void scanner_set_active_sets(ScannerData *scanner, PatternSetMap activeSets) {
+#ifdef MULTI_PATTERN_SET_REPORT_MATCHES
+	int i, max;
+#endif
 	scanner->activeSets = activeSets;
+#ifdef MULTI_PATTERN_SET_REPORT_MATCHES
+	max = -1;
+	for (i = 0; i < sizeof(PatternSetMap); i++) {
+		if (GET_1BIT_ELEMENT((unsigned char *)(&activeSets), i)) {
+			max = i;
+		}
+	}
+	if (max >= 0) {
+		scanner->matchReports = (int*)malloc(sizeof(int) * (max + 1));
+		memset(scanner->matchReports, 0, sizeof(int) * (max + 1));
+	}
+#endif
 }
 
 int scanner_start(ScannerData *scanner) {
@@ -750,7 +780,22 @@ void scanner_join(ScannerData *scanner) {
 		}
 	} while (status == LIST_STATUS_DEQUEUE_SUCCESS);
 	list_destroy(&(scanner->free_queue), 0);
+
+#ifdef MULTI_PATTERN_SET_REPORT_MATCHES
+	free(scanner->matchReports);
+#endif
 }
+
+#ifdef MULTI_PATTERN_SET_REPORT_MATCHES
+void scanner_report_match(ScannerData *scanner, PatternSetMap reportees, STATE_PTR_TYPE_WIDE state, char *pattern, int idx) {
+	int i;
+	for (i = 0; i < sizeof(PatternSetMap); i++) {
+		if (reportees & (1 << i)) {
+			scanner->matchReports[i]++;
+		}
+	}
+}
+#endif
 
 void scanner_set_machine_type(ScannerData *scanner, enum MACHINE_TYPE type) {
 	switch (type) {

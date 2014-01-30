@@ -21,6 +21,7 @@
 #endif
 
 struct multicore_manager;
+struct scanner_data;
 
 typedef struct {
 	STATE_PTR_TYPE_WIDE *table;
@@ -49,8 +50,9 @@ void setMatch(TableStateMachine *machine, STATE_PTR_TYPE_WIDE state, char *patte
 
 //int matchTableMachine(TableStateMachine *tableMachine, char *input, int length, int verbose);
 int matchTableMachine(TableStateMachine *machine, struct multicore_manager *manager, int transfer_heavy, char *input, int length, int verbose,
-		long *numAccesses, long *accessesByDepth, long *accessesByState, int *visits, int *is_heavy, int *last_idx_in_root, double *uncommonRate,
-		PatternSetMap activeSets);
+		long *numAccesses, long *accessesByDepth, long *accessesByState, int *visits,
+		int *is_heavy, int *last_idx_in_root, double *uncommonRate,
+		struct scanner_data *scanner);
 
 int matchTableMachine_no_trasfer(TableStateMachine *machine, struct multicore_manager *manager, char *input, int length, int verbose, int drop);
 

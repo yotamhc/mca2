@@ -58,6 +58,7 @@
 #define OPTION_COMMON		'f'
 #define OPTION_THRESHOLDS 	'A'
 #define OPTION_ACTIVE_SETS	'S'
+#define OPTION_SKIP_PROB	'P'
 
 // Numeric options
 #define OPTION_MAXLE		'l'
@@ -86,22 +87,23 @@
 #define IDX_COMMON		5
 #define IDX_THRESHOLDS	6
 #define IDX_ACTIVE_SETS 7
-#define IDX_MAXLE		8
-#define IDX_MAXBM		9
-#define IDX_THREADS		10
-#define IDX_STEAL		11
-#define IDX_REPEAT		12
-#define IDX_WG_SIZE		13
-#define IDX_MAX_WGS		14
-#define IDX_COMMON_NUM	15
-#define IDX_UNCOMMON_LIM 16
-#define IDX_DROP_LEN	17
-#define IDX_VERBOSE		18
-#define IDX_TIMING		19
-#define IDX_USE_COMP 	20
+#define IDX_SKIP_PROB	8
+#define IDX_MAXLE		9
+#define IDX_MAXBM		10
+#define IDX_THREADS		11
+#define IDX_STEAL		12
+#define IDX_REPEAT		13
+#define IDX_WG_SIZE		14
+#define IDX_MAX_WGS		15
+#define IDX_COMMON_NUM	16
+#define IDX_UNCOMMON_LIM 17
+#define IDX_DROP_LEN	18
+#define IDX_VERBOSE		19
+#define IDX_TIMING		20
+#define IDX_USE_COMP 	21
 
-#define NUM_OF_OPTIONS 			21
-#define NUM_OF_STRING_OPTIONS	8
+#define NUM_OF_OPTIONS 			22
+#define NUM_OF_STRING_OPTIONS	9
 #define NUM_OF_NUMERIC_OPTIONS	10
 
 #define DEFAULT_MAX_GOTOS_LE 4
@@ -114,6 +116,7 @@
 #define DEFAULT_COMMON_NUM 512
 #define DEFAULT_UNCOMMON_LIM 30
 #define DEFAULT_DROP_LEN 0
+#define DEFAULT_SKIP_PROB 1
 
 void showUsage(const char *filename) {
 	printf(USAGE, filename);
@@ -217,6 +220,10 @@ int parsePatternSets(char *in, char **paths) {
 	return p;
 }
 
+double parseSkipProb(const char *in) {
+	return atof(in);
+}
+
 int main(int argc, const char *argv[]) {
 /*
 	main_findLongestPath();
@@ -235,6 +242,7 @@ int main(int argc, const char *argv[]) {
 	char *patternPaths[128];
 	int numPatternSets;
 	PatternSetMap activeSets;
+	double skipProb;
 
 	machine = NULL;
 
@@ -277,6 +285,9 @@ int main(int argc, const char *argv[]) {
 			break;
 		case OPTION_ACTIVE_SETS:
 			idx = IDX_ACTIVE_SETS;
+			break;
+		case OPTION_SKIP_PROB:
+			idx = IDX_SKIP_PROB;
 			break;
 		case OPTION_MAXLE:
 			idx = IDX_MAXLE;
@@ -396,7 +407,12 @@ int main(int argc, const char *argv[]) {
 	} else if (options[IDX_READ]) {
 		machine = createStateMachineFromDump(paths[IDX_READ]);
 	} else if (options[IDX_FULLTBL]) {
-		machine = (StateMachine*)generateTableStateMachine((const char**)patternPaths, numPatternSets, values[IDX_COMMON_NUM], 0, NULL, paths[IDX_COMMON], options[IDX_VERBOSE]);
+		if (options[IDX_SKIP_PROB]) {
+			skipProb = parseSkipProb(paths[IDX_SKIP_PROB]);
+		} else {
+			skipProb = DEFAULT_SKIP_PROB;
+		}
+		machine = (StateMachine*)generateTableStateMachine((const char**)patternPaths, numPatternSets, values[IDX_COMMON_NUM], 0, NULL, paths[IDX_COMMON], options[IDX_VERBOSE], skipProb);
 	}
 #else
 	} else if (options[IDX_READ] && options[IDX_FULLTBL]) {
